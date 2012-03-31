@@ -34,6 +34,7 @@
     <script src="http://localhost:8001/lib/notification.js"></script>
     <script src="http://localhost:8001/lib/plugin/store.js"></script>
     <script src="http://localhost:8001/lib/plugin/permissions.js"></script>
+    <script src="http://localhost:8001/lib/plugin/annotateitpermissions.js"></script>
     <script src="http://localhost:8001/lib/plugin/auth.js"></script>
     <script src="http://localhost:8001/lib/plugin/tags.js"></script>
     <script src="http://localhost:8001/lib/plugin/unsupported.js"></script>
@@ -223,13 +224,7 @@
     jQuery(function($) {
     	$('#protocol-content').annotator().annotator('setupPlugins',
         {
-	storeUri: 'http://uat.annotateit.org/api',
-	userId:      'habeanf',       // Your AnnotateIt username
-	userName:    'habeanf',
-        accountId: '39fc339cf058bd22176771b3e36196dd',  // Your Account Key
-        authToken:   '5ce58e308a83d08ffd3c424e357360ff355661c3cf09258bcf01bc1d74a10c10'// Your Auth Token
 	},{Filter:false}).annotator('addPlugin', 'MarginViewer');
-
     });
     // current hit count = {% get_hit_count for object %}
 --></script>
