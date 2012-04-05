@@ -221,11 +221,19 @@
     $(document).ready(function() {
         {% get_hit_count_javascript for object %}
     });
-    jQuery(function($) {
-    	$('#protocol-content').annotator().annotator('setupPlugins',
+ 
+    $('#protocol-content').annotator().annotator('setupPlugins',
         {
-	},{Filter:false}).annotator('addPlugin', 'MarginViewer');
-    });
+	},{Filter:false}).annotator('addPlugin', 'MarginViewer'
+        );
+    /*$('#protocol-content').annotator('addPlugin', 'Permissions');
+
+
+    var annUser = $('#protocol-content').data('annotator').plugins.Permissions.user;
+    $('#protocol-content').annotator('addPlugin', 'Permissions', 
+          {permissions: { 'delete': [user]}
+        });
+*/
     // current hit count = {% get_hit_count for object %}
 --></script>
 {% endblock %}
