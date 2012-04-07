@@ -222,10 +222,14 @@
         {% get_hit_count_javascript for object %}
     });
  
-    $('#protocol-content').annotator().annotator('setupPlugins',
+    var ann=$('#protocol-content').annotator().annotator('setupPlugins',
         {
 	},{Filter:false}).annotator('addPlugin', 'MarginViewer'
         );
+    ann.data('annotator').plugins.Auth.withToken(function (tok) {
+        ann.data('annotator').plugins.AnnotateItPermissions.options.permissions.delete.push(tok.userId);
+            
+	});
     /*$('#protocol-content').annotator('addPlugin', 'Permissions');
 
 
