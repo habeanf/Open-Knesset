@@ -226,18 +226,13 @@
         {
 	},{Filter:false}).annotator('addPlugin', 'MarginViewer'
         );
+
     ann.data('annotator').plugins.Auth.withToken(function (tok) {
         ann.data('annotator').plugins.AnnotateItPermissions.options.permissions.delete.push(tok.userId);
-            
+        $('#protocol-content').annotator('addPlugin', 'Permissions',
+		{permissions:{'delete':[tok.userId]}});
 	});
-    /*$('#protocol-content').annotator('addPlugin', 'Permissions');
 
-
-    var annUser = $('#protocol-content').data('annotator').plugins.Permissions.user;
-    $('#protocol-content').annotator('addPlugin', 'Permissions', 
-          {permissions: { 'delete': [user]}
-        });
-*/
     // current hit count = {% get_hit_count for object %}
 --></script>
 {% endblock %}
