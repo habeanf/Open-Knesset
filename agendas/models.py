@@ -484,8 +484,72 @@ class Agenda(models.Model):
     def get_mks_values(self,ranges=None):
         if ranges is None:
             ranges = [[dateMonthTruncate(Knesset.objects.current_knesset().start_date),None]]
+            fullRange = True
         mks_values = False
-        fullRange = ranges == [[None,None]]
+        if fullRange:
+            mks_values = cache.get('agenda_%d_mks_values' % self.id)
+        if not mks_values:
+            # get list of mk ids
+            mk_ids = Member.objects.filter(current_party__isnull=False).values_list('id',flat=True)
+
+            # generate summary query
+            filterList = self.generateSummaryFilters(ranges)
+
+            # query summary
+            baseQuerySet = SummaryAgenda.objects.filter(agenda=self)
+            if filterList:
+                if len(filterList)>1:
+                    filtersFolded = reduce(lambda x,y:x | y, filterList)
+                else:
+                    filtersFolded = filterList[0]
+                baseQuerySet.filter(filtersFolded)
+            summaries = list(baseQuerySet)
+            # group summaries for respective ranges
+            summariesForRanges = []
+            for r in ranges:
+                summariesForRange = defaultdict(list)
+                for s in summaries:
+                    if (not r[0] or s.month>=r[0]) and \
+                        (not r[1] or s.month<r[1]):
+                        summariesForRange[s.summary_type].append(s)
+                summariesForRanges.append(summariesForRange)
+
+            # compute agenda measures, store results per MK
+            mk_results = dict(map(lambda mk_id:(mk_id,[]),mk_ids))
+            for summaries in summariesForRanges:
+                agenda_data             = summaries['AG']
+                total_votes             = sum(map(attrgetter('votes'),agenda_data))
+                total_score             = sum(map(attrgetter('score'),agenda_data))
+                current_mks_data        = indexby(summaries['MK'],attrgetter('mk_id'))
+                # calculate results per mk
+                rangeMkResults          = []
+                for mk_id in mk_results.keys():
+                    mk_data     = current_mks_data[mk_id]
+                    if mk_data:
+                        mk_votes    = sum(map(attrgetter('votes'),mk_data))
+                        mk_volume   = 100*mk_votes/total_votes
+                        mk_score    = 100*sum(map(attrgetter('score'),mk_data))/total_score if total_score != 0 else 0
+                        rangeMkResults.append((mk_id,mk_votes,mk_score,mk_volume))
+                    else:
+                        rangeMkResults.append(tuple([mk_id]+[0]*3))
+                # sort results by score descending
+                for rank,(mk_id,mk_votes,mk_score,mk_volume) in enumerate(sorted(rangeMkResults,key=itemgetter(2,0),reverse=True)):
+                    mk_range_data = dict(score=mk_score,rank=rank,volume=mk_volume,numvotes=mk_votes)
+                    if len(ranges)==1:
+                        mk_results[mk_id]=mk_range_data
+                    else:
+                        mk_results[mk_id].append(mk_range_data)
+            if fullRange:
+                cache.set('agenda_%d_mks_values' % self.id, mks_values, 1800)
+        if len(ranges)==1:
+            mk_results = sorted(mk_results.items(),key=lambda (k,v):v['rank'])
+        return mk_results
+
+    def get_party_values(self,ranges=None):
+        if ranges is None:
+            fullRange = True
+            ranges = [[dateMonthTruncate(Knesset.objects.current_knesset().start_date),None]]
+        mks_values = False
         if fullRange:
             mks_values = cache.get('agenda_%d_mks_values' % self.id)
         if not mks_values:
@@ -566,7 +630,7 @@ class Agenda(models.Model):
         current_grades = [x for x in grades if x[0] in mks_ids]
         return current_grades
 
-    def get_party_values(self):
+    def get_party_values_old(self):
         party_grades = Agenda.objects.get_all_party_values()
         return party_grades.get(self.id,[])
 
