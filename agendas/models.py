@@ -545,7 +545,7 @@ class Agenda(models.Model):
             mk_results = sorted(mk_results.items(),key=lambda (k,v):v['rank'])
         return mk_results
 
-    def get_party_values(self,ranges=None):
+    def get_party_values_new(self,ranges=None):
         if ranges is None:
             fullRange = True
             ranges = [[dateMonthTruncate(Knesset.objects.current_knesset().start_date),None]]
@@ -630,7 +630,7 @@ class Agenda(models.Model):
         current_grades = [x for x in grades if x[0] in mks_ids]
         return current_grades
 
-    def get_party_values_old(self):
+    def get_party_values(self):
         party_grades = Agenda.objects.get_all_party_values()
         return party_grades.get(self.id,[])
 
