@@ -1,28 +1,26 @@
 # -*- coding: utf-8 -*-
-from south.utils import datetime_utils as datetime
-from south.db import db
-from south.v2 import SchemaMigration
-from django.db import models
+from south.v2 import DataMigration
 
 
-class Migration(SchemaMigration):
+class Migration(DataMigration):
 
-    depends_on = (
-        ('polyorg','0001_initial'),
-    )
+    VOTE_TYPES = {'law-approve': u'אישור החוק', 'second-call': u'קריאה שנייה',
+                  'demurrer': u'הסתייגות', 'no-confidence': u'הצעת אי-אמון',
+                  'pass-to-committee': u'להעביר את ',
+                  'continuation': u'להחיל דין רציפות'}
 
     def forwards(self, orm):
-        # Adding model 'CandidateListVotingStatistics'
-        db.create_table('laws_candidatelistvotingstatistics', (
-            ('id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
-            ('candidates_list', self.gf('django.db.models.fields.related.OneToOneField')(related_name='voting_statistics', unique=True, to=orm['polyorg.CandidateList'])),
-        ))
-        db.send_create_signal('laws', ['CandidateListVotingStatistics'])
-
+        "Write your forwards methods here."
+        # Note: Don't use "from appname.models import ModelName".
+        # Use orm.ModelName to refer to models in this application,
+        # and orm['appname.ModelName'] for models in other applications.
+        for vtype, vtype_prefix in self.VOTE_TYPES.iteritems():
+            orm.Vote.objects.filter(title__startswith=vtype_prefix).update(
+                vote_type=vtype)
 
     def backwards(self, orm):
-        # Deleting model 'CandidateListVotingStatistics'
-        db.delete_table('laws_candidatelistvotingstatistics')
+        "Write your backwards methods here."
+        orm.Vote.objects.all().update(vote_type=None)
 
     models = {
         u'auth.group': {
@@ -229,6 +227,7 @@ class Migration(SchemaMigration):
             'time_string': ('django.db.models.fields.CharField', [], {'max_length': '100'}),
             'title': ('django.db.models.fields.CharField', [], {'max_length': '1000'}),
             'vote_number': ('django.db.models.fields.IntegerField', [], {'null': 'True', 'blank': 'True'}),
+            'vote_type': ('django.db.models.fields.CharField', [], {'max_length': '32', 'blank': 'True'}),
             'votes': ('django.db.models.fields.related.ManyToManyField', [], {'symmetrical': 'False', 'related_name': "'votes'", 'blank': 'True', 'through': u"orm['laws.VoteAction']", 'to': u"orm['mks.Member']"}),
             'votes_count': ('django.db.models.fields.IntegerField', [], {'null': 'True', 'blank': 'True'})
         },
@@ -391,3 +390,4 @@ class Migration(SchemaMigration):
     }
 
     complete_apps = ['laws']
+    symmetrical = True

@@ -7,22 +7,17 @@ from django.db import models
 
 class Migration(SchemaMigration):
 
-    depends_on = (
-        ('polyorg','0001_initial'),
-    )
-
     def forwards(self, orm):
-        # Adding model 'CandidateListVotingStatistics'
-        db.create_table('laws_candidatelistvotingstatistics', (
-            ('id', self.gf('django.db.models.fields.AutoField')(primary_key=True)),
-            ('candidates_list', self.gf('django.db.models.fields.related.OneToOneField')(related_name='voting_statistics', unique=True, to=orm['polyorg.CandidateList'])),
-        ))
-        db.send_create_signal('laws', ['CandidateListVotingStatistics'])
+        # Adding field 'Vote.vote_type'
+        db.add_column(u'laws_vote', 'vote_type',
+                      self.gf('django.db.models.fields.CharField')(default='', max_length=32, blank=True),
+                      keep_default=False)
 
 
     def backwards(self, orm):
-        # Deleting model 'CandidateListVotingStatistics'
-        db.delete_table('laws_candidatelistvotingstatistics')
+        # Deleting field 'Vote.vote_type'
+        db.delete_column(u'laws_vote', 'vote_type')
+
 
     models = {
         u'auth.group': {
@@ -229,6 +224,7 @@ class Migration(SchemaMigration):
             'time_string': ('django.db.models.fields.CharField', [], {'max_length': '100'}),
             'title': ('django.db.models.fields.CharField', [], {'max_length': '1000'}),
             'vote_number': ('django.db.models.fields.IntegerField', [], {'null': 'True', 'blank': 'True'}),
+            'vote_type': ('django.db.models.fields.CharField', [], {'max_length': '32', 'blank': 'True'}),
             'votes': ('django.db.models.fields.related.ManyToManyField', [], {'symmetrical': 'False', 'related_name': "'votes'", 'blank': 'True', 'through': u"orm['laws.VoteAction']", 'to': u"orm['mks.Member']"}),
             'votes_count': ('django.db.models.fields.IntegerField', [], {'null': 'True', 'blank': 'True'})
         },
