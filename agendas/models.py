@@ -60,7 +60,7 @@ class AgendaVoteManager(models.Manager):
 
         mk_query = queries.BASE_MK_QUERY % db_functions
         cursor.execute(mk_query)
-
+        #TODO: add query to aggregate mk's monthly data by party using membership
 
 class AgendaVote(models.Model):
     agenda = models.ForeignKey('Agenda', related_name='agendavotes')
@@ -108,12 +108,18 @@ class AgendaVote(models.Model):
         agendasByMk     = dict(map(lambda summary:(summary.mk_id,summary),
                                    filter(lambda summary:summary.summary_type=='MK',
                                           summaryObjects)))
+        agendasByParty     = dict(map(lambda summary:(summary.party_id,summary),
+                                   filter(lambda summary:summary.summary_type=='PR',
+                                          summaryObjects)))
         newObjects = []
         if agendaSummary:
             newObjects.append(agendaSummary)
         voters = defaultdict(list)
+        #TODO: Parties should be a sub dict, aggregating total +/- for party
+        parties = defaultdict(int)
         for vote_action in self.vote.voteaction_set.all():
             mkSummary = agendasByMk.get(vote_action.member_id, None)
+            partySummary = agendasByParty.get(vote_action.member.current_party_id, None)
             if not mkSummary:
                 mkSummary = SummaryAgenda(month=objMonth,
                                           agenda=self.agenda,
@@ -124,6 +130,19 @@ class AgendaVote(models.Model):
                 newObjects.append(mkSummary)
             else:
                 voters[vote_action.type].append(vote_action.member_id)
+            #TODO: fix to check if party is not completely new for objMonth (nested test for party in dict)
+            if not partySummary:
+
+                partySummary = SummaryAgenda(month=objMonth,
+                                          agenda=self.agenda,
+                                          summary_type='PR',
+                                          party_id=vote_action.member.current_party_id,
+                                          votes=1,
+                                          score=agendaScore * (1 if vote_action.type == 'for' else -1))
+                newObjects.append(partySummary)
+            else:
+                parties[vote_action.member.current_party_id] += (1 if vote_action.type == 'for' else -1))
+                parties[vote_action.type].append(vote_action.member.current_party_id)
 
         SummaryAgenda.objects.filter(mk_id__in=voters['for'],month=objMonth).update(votes=F('votes') + 1, score=F('score')+agendaScore)
         SummaryAgenda.objects.filter(mk_id__in=voters['against'],month=objMonth).update(votes=F('votes') + 1, score=F('score')-agendaScore)
@@ -308,6 +327,81 @@ class AgendaManager(models.Manager):
     #         if ranges = [[None,None]]:
     #             cache.set('agendas_mks_values', mks_values, 1800)
     #     return mks_values
+
+
+    def get_agendas_parties_values(self,agendas=None,parties=None,ranges=None):
+        if ranges is None and agendas is None and parties is None:
+            ranges = [[dateMonthTruncate(Knesset.objects.current_knesset().start_date),None]]
+            defaults = True
+        default_values = False
+        if defaults:
+            default_values = cache.get('agendas_default_values')
+        if not default_values:
+            # get list of party ids
+            partyQuerySet = Party.objects.all()
+            if parties is None:
+                partyQuerySet = partyQuerySet.filter(knesset=Knesset.objects.current_knesset())
+            else:
+                partyQuerySet = partyQuerySet.filter(id__in=parties)
+
+            party_subset = dict(partyQuerySet.values_list('id','number_of_seats'))
+            parties_ids = party_subset.keys()
+            # generate summary query
+            filterList = self.generateSummaryFilters(ranges)
+
+            # query summary
+            baseQuerySet = SummaryAgenda.objects.filter(agenda=self,summary_type__in=['AG','PR'],party_id__in=parties_ids)
+            if agendas is not None:
+                baseQuerySet.filter(agenda_id__in=agendas)
+                baseQuerySet.filter()
+            if filterList:
+                if len(filterList)>1:
+                    filtersFolded = reduce(lambda x,y:x | y, filterList)
+                else:
+                    filtersFolded = filterList[0]
+                baseQuerySet.filter(filtersFolded)
+            summaries = list(baseQuerySet)
+            # group summaries for respective ranges
+            summariesForRanges = []
+            for r in ranges:
+                summariesForRange = defaultdict(list)
+                for s in summaries:
+                    if (not r[0] or s.month>=r[0]) and \
+                        (not r[1] or s.month<r[1]):
+                        summariesForRange[s.summary_type].append(s)
+                summariesForRanges.append(summariesForRange)
+
+            # compute agenda measures, store results per Party
+            party_results = dict(map(lambda party_id:(party_id,[]),party_ids))
+            for summaries in summariesForRanges:
+                agenda_data             = summaries['AG']
+                total_votes             = sum(map(attrgetter('votes'),agenda_data))
+                total_score             = sum(map(attrgetter('score'),agenda_data))
+                current_parties_data        = indexby(summaries['PR'],attrgetter('party_id'))
+                # calculate results per party
+                rangePartyResults          = []
+                for party_id in party_results.keys():
+                    party_data     = current_parties_data[party_id]
+                    if party_data:
+                        party_votes    = sum(map(attrgetter('votes'),party_data))
+                        party_volume   = 100*party_votes/(total_votes*party_subset[party_id])
+                        party_score    = 100*sum(map(attrgetter('score'),party_data))/(total_score*party_subset[party_id]) if total_score != 0 else 0
+                        rangePartyResults.append((party_id,party_votes,party_score,party_volume))
+                    else:
+                        rangePartyResults.append(tuple([party_id]+[0]*3))
+                # sort results by score descending
+                for rank,(party_id,party_votes,party_score,party_volume) in enumerate(sorted(rangePartyResults,key=itemgetter(2,0),reverse=True)):
+                    party_range_data = dict(score=party_score,rank=rank,volume=party_volume,numvotes=party_votes)
+                    if len(ranges)==1:
+                        party_results[party_id]=party_range_data
+                    else:
+                        party_results[party_id].append(party_range_data)
+            if defaults:
+                cache.set('agendas_default_values', default_values, 1800)
+        if len(ranges)==1:
+            party_results = sorted(party_results.items(),key=lambda (k,v):v['rank'])
+        return party_results
+
 
     def get_all_party_values(self):
         return queries.getAllAgendaPartyVotes()
@@ -496,7 +590,7 @@ class Agenda(models.Model):
             filterList = self.generateSummaryFilters(ranges)
 
             # query summary
-            baseQuerySet = SummaryAgenda.objects.filter(agenda=self)
+            baseQuerySet = SummaryAgenda.objects.filter(agenda=self,summary_type__in==['AG','MK'])
             if filterList:
                 if len(filterList)>1:
                     filtersFolded = reduce(lambda x,y:x | y, filterList)
@@ -664,7 +758,8 @@ class Agenda(models.Model):
 
 SUMMARY_TYPES = (
     ('AG','Agenda Votes'),
-    ('MK','MK Counter')
+    ('MK','MK Counter'),
+    ('PR','Party Counter')
 )
 
 class SummaryAgenda(models.Model):
@@ -674,6 +769,7 @@ class SummaryAgenda(models.Model):
     score           = models.FloatField(default=0.0)
     votes           = models.BigIntegerField(default=0)
     mk              = models.ForeignKey(Member,blank=True, null=True, related_name='agenda_summaries')
+    party           = models.ForeignKey(Party,blank=True, null=True, related_name='agenda_summaries')
     db_created      = models.DateTimeField(auto_now_add=True)
     db_updated      = models.DateTimeField(auto_now=True)
 
