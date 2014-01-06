@@ -60,7 +60,8 @@ class AgendaVoteManager(models.Manager):
 
         mk_query = queries.BASE_MK_QUERY % db_functions
         cursor.execute(mk_query)
-        #TODO: add query to aggregate mk's monthly data by party using membership
+        party_query = queries.BASE_PARTY_QUERY % db_functions
+        cursor.execute(party_query)
 
 class AgendaVote(models.Model):
     agenda = models.ForeignKey('Agenda', related_name='agendavotes')
@@ -141,7 +142,7 @@ class AgendaVote(models.Model):
                                           score=agendaScore * (1 if vote_action.type == 'for' else -1))
                 newObjects.append(partySummary)
             else:
-                parties[vote_action.member.current_party_id] += (1 if vote_action.type == 'for' else -1))
+                parties[vote_action.member.current_party_id] += (1 if vote_action.type == 'for' else -1)
                 parties[vote_action.type].append(vote_action.member.current_party_id)
 
         SummaryAgenda.objects.filter(mk_id__in=voters['for'],month=objMonth).update(votes=F('votes') + 1, score=F('score')+agendaScore)
@@ -590,7 +591,7 @@ class Agenda(models.Model):
             filterList = self.generateSummaryFilters(ranges)
 
             # query summary
-            baseQuerySet = SummaryAgenda.objects.filter(agenda=self,summary_type__in==['AG','MK'])
+            baseQuerySet = SummaryAgenda.objects.filter(agenda=self, summary_type__in=['AG','MK'])
             if filterList:
                 if len(filterList)>1:
                     filtersFolded = reduce(lambda x,y:x | y, filterList)
