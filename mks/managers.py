@@ -1,4 +1,5 @@
 import difflib
+from collections import defaultdict
 from django.core.cache import cache
 from django.db import models, connection
 
@@ -47,6 +48,29 @@ class PartyManager(BetterManager):
     def parties_during_range(self, ranges=None):
         filters_folded = Agenda.generateSummaryFilters(ranges, 'start_date', 'end_date')
         return self.filter(filters_folded)
+
+class PartySeatsManager(models.Manager):
+    def parties_seats_by_ranges(self, ranges):
+        all_party_seats = cache.get('party_seats')
+        # cache all party seats (very small table, hardly ever changes)
+        if not all_party_seats:
+            all_party_seats = list(self.order_by('start_date'))
+            cache.set('party_seats', all_party_seats)
+
+        range_seats = []
+        for cur_range in ranges:
+            cur_range_seats = defaultdict(list())
+            for party_range in all_party_seats:
+                # test party range in current range
+                if not((cur_range[0] and party_range.end_date and
+                        party_range.end_date < cur_range[0])
+                       or
+                       (cur_range[1] and party_range.start_date and
+                        cur_range[1] < party_range.start_date)):
+                    cur_range_seats[party_range.party_id].append(party_range)
+            range_seats.append(cur_range_seats)
+        return range_seats
+
 
 class CurrentKnessetPartyManager(models.Manager):
 
