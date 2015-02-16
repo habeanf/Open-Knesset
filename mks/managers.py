@@ -59,7 +59,7 @@ class PartySeatsManager(models.Manager):
 
         range_seats = []
         for cur_range in ranges:
-            cur_range_seats = defaultdict(list())
+            cur_range_seats = defaultdict(list)
             for party_range in all_party_seats:
                 # test party range in current range
                 if not((cur_range[0] and party_range.end_date and

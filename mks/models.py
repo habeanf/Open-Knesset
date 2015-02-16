@@ -13,7 +13,7 @@ from links.models import Link
 import difflib
 from mks.managers import (
     BetterManager, PartyManager, KnessetManager, CurrentKnessetMembersManager,
-    CurrentKnessetPartyManager, MembershipManager)
+    CurrentKnessetPartyManager, MembershipManager, PartySeatsManager)
 
 GENDER_CHOICES = (
     (u'M', _('Male')),
@@ -156,6 +156,7 @@ class PartySeats(models.Model):
     end_date = models.DateField(blank=True, null=True)
     number_of_seats = models.IntegerField(blank=True, null=True)
 
+    objects = PartySeatsManager()
 
 class Membership(models.Model):
     member = models.ForeignKey('Member')
