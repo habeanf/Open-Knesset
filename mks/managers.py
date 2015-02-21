@@ -51,25 +51,26 @@ class PartyManager(BetterManager):
 
 class PartySeatsManager(models.Manager):
     def parties_seats_by_ranges(self, ranges):
-        all_party_seats = cache.get('party_seats')
+        allPartySeats = cache.get('party_seats')
         # cache all party seats (very small table, hardly ever changes)
-        if not all_party_seats:
-            all_party_seats = list(self.order_by('start_date'))
-            cache.set('party_seats', all_party_seats)
+        if not allPartySeats:
+            allPartySeats = list(self.order_by('start_date'))
+            cache.set('party_seats', allPartySeats)
 
-        range_seats = []
-        for cur_range in ranges:
-            cur_range_seats = defaultdict(list)
-            for party_range in all_party_seats:
+        rangeSeats = []
+        for curRange in ranges:
+            curRangeSeats = defaultdict(list)
+            for partyRange in allPartySeats:
+                    continue
                 # test party range in current range
-                if not((cur_range[0] and party_range.end_date and
-                        party_range.end_date < cur_range[0])
+                if not((curRange[0] and partyRange.end_date and
+                        partyRange.end_date < curRange[0])
                        or
-                       (cur_range[1] and party_range.start_date and
-                        cur_range[1] < party_range.start_date)):
-                    cur_range_seats[party_range.party_id].append(party_range)
-            range_seats.append(cur_range_seats)
-        return range_seats
+                       (curRange[1] and partyRange.start_date and
+                        curRange[1] < partyRange.start_date)):
+                    curRangeSeats[partyRange.party_id].append(partyRange)
+            rangeSeats.append(curRangeSeats)
+        return rangeSeats
 
 
 class CurrentKnessetPartyManager(models.Manager):

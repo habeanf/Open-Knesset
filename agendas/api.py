@@ -120,21 +120,31 @@ class AgendaResource(BaseResource):
         return members
 
     def dehydrate_parties(self, bundle):
-        party_values = dict(map(lambda party_data:(party_data[0],(party_data[1],party_data[2])),
-                            bundle.obj.get_party_values()))
-        parties = []
-        for party in Party.objects.all():
-            if party.pk in party_values:
-                parties.append(dict(name=party.name, 
-                                    score=party_values[party.pk][0], 
-                                    volume=party_values[party.pk][1],
-                                    absolute_url=party.get_absolute_url()))
-            else:
-                parties.append(dict(name=party.name,
-                                    score=0,
-                                    volume=0,
-                                    absolute_url=party.get_absolute_url()))
-        return parties
+        rangesString = bundle.request.GET.get('ranges',None)
+        fullRange = rangesString is None
+        if not fullRange:
+            ranges = map(   lambda rangeString:[datetime.strptime(val,"%Y%m") if val else None for val in rangeString.split('-')],
+                            rangesString.split(','))
+            party_values = dict(bundle.obj.get_party_values(ranges))
+        else:
+            party_values = dict(bundle.obj.get_party_values())
+        return party_values
+        # members = []
+        # party_values = dict(map(lambda party_data:(party_data[0],(party_data[1],party_data[2])),
+        #                     bundle.obj.get_party_values()))
+        # parties = []
+        # for party in Party.objects.all():
+        #     if party.pk in party_values:
+        #         parties.append(dict(name=party.name, 
+        #                             score=party_values[party.pk][0], 
+        #                             volume=party_values[party.pk][1],
+        #                             absolute_url=party.get_absolute_url()))
+        #     else:
+        #         parties.append(dict(name=party.name,
+        #                             score=0,
+        #                             volume=0,
+        #                             absolute_url=party.get_absolute_url()))
+        # return parties
 
     def dehydrate_votes(self, bundle):
         return [

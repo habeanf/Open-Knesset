@@ -484,8 +484,8 @@ class Agenda(models.Model):
         mks_values = False
         mk_ids = [mk.id for mk in mks] if mks else []
 
-        fullRange = ranges == [[dateMonthTruncate(Knesset.objects.current_knesset().start_date),None]]
-        if fullRange:
+        defaultRange = ranges == [[dateMonthTruncate(Knesset.objects.current_knesset().start_date),None]]
+        if defaultRange:
             mks_values = cache.get('agenda_%d_mks_values' % self.id)
             if mks_values and mks:
                 mks_values = [(mk_id, values)
@@ -543,7 +543,7 @@ class Agenda(models.Model):
                         mk_results[mk_id]=mk_range_data
                     else:
                         mk_results[mk_id].append(mk_range_data)
-            if fullRange:
+            if defaultRange:
                 cache.set('agenda_%d_mks_values' % self.id, mks_values, 1800)
         if len(ranges)==1:
             mk_results = sorted(mk_results.items(),key=lambda (k,v):v['rank'])
@@ -570,15 +570,15 @@ class Agenda(models.Model):
         current_grades = [x for x in grades if x[0] in mks_ids]
         return current_grades
 
-    def get_party_values_new(self, ranges=None, parties=None):
+    def get_all_party_values_new(self, ranges=None, parties=None):
         """docstring for get_party_values_new"""
         if ranges is None:
             ranges = [[dateMonthTruncate(Knesset.objects.current_knesset().start_date), None]]
         parties_values = False
         party_ids = [party.id for party in parties] if parties else []
 
-        fullRange = ranges == [[dateMonthTruncate(Knesset.objects.current_knesset().start_date), None]]
-        if fullRange:
+        defaultRange = ranges == [[dateMonthTruncate(Knesset.objects.current_knesset().start_date), None]]
+        if defaultRange:
             parties_values = cache.get('agenda_%d_parties_values' % self.id)
             if parties_values and parties:
                 parties_values = [(party_id, values)
@@ -586,18 +586,20 @@ class Agenda(models.Model):
                               if party_id in party_ids]
 
         if not parties_values:
+            # find parties seats by range
+            ranges_party_seats = PartySeats.objects.parties_seats_by_ranges(ranges)
             # get list of party ids
-            if not party_ids:
-                party_ids = list(Party.objects.parties_during_range(ranges).values_list('id'))
+            party_ids = list(Party.objects.parties_during_range(ranges).values_list('id'))
 
             # generate summary query
             filters_folded = self.generateSummaryFilters(ranges, 'month', 'month')
 
-            # query summary
+            # query summary (query all parties for correct ranking - no filtering!)
             baseQuerySet = SummaryAgenda.objects.filter(agenda=self, summary_type__in=['AG', 'PR'])
             if filters_folded:
                 baseQuerySet.filter(filters_folded)
             summaries = list(baseQuerySet)
+
             # group summaries for respective ranges
             summariesForRanges = []
             for r in ranges:
@@ -610,34 +612,45 @@ class Agenda(models.Model):
 
             # compute agenda measures, store results per party
             party_results = dict(map(lambda party_id:(party_id,[]),party_ids))
-            for summaries in summariesForRanges:
+            for summaries, party_seats in zip(summariesForRanges, ranges_party_seats):
                 agenda_data             = summaries['AG']
                 total_votes             = sum(map(attrgetter('votes'),agenda_data))
-                total_for_votes         = sum(map(attrgetter('for_votes'),agenda_data))
-                total_against_votes     = sum(map(attrgetter('against_votes'),agenda_data))
                 total_score             = sum(map(attrgetter('score'),agenda_data))
                 current_parties_data        = indexby(summaries['PR'],attrgetter('party_id'))
                 # calculate results per party
                 rangePartyValues        = []
                 for party_id in party_results.keys():
+                    # get number of seats for current party in current range
+                    # if party does not exist in range, skip it
+                    curPartySeats  = party_seats.get(party_id, None)
+                    if not curPartySeats:
+                        continue
                     party_data     = current_parties_data[party_id]
                     if party_data:
+                        partyMaxScore          = total_score*curPartySeats
+                        partyMaxVolume         = total_votes*curPartySeats
                         party_votes            = sum(map(attrgetter('votes'),party_data))
                         party_for_votes        = sum(map(attrgetter('for_votes'),party_data))
                         party_against_votes    = sum(map(attrgetter('against_votes'),party_data))
-                        party_volume           = 100*party_votes/total_votes
-                        party_score            = 100*sum(map(attrgetter('score'),party_data))/total_score if total_score != 0 else 0
-                        rangePartyValues.append((party_id,party_votes,party_for_votes,party_against_votes,party_score,party_volume))
+                        party_volume           = 100*party_votes/partyMaxVolume
+                        partyTotalScore        = sum(map(attrgetter('score'),party_data))
+                        partyNormalizedScore   = 100*partyTotalScore/partyMaxScore if total_score != 0 else 0
+                        rangePartyValues.append((party_id,party_votes,party_for_votes,party_against_votes,partyNormalizedScore,party_volume))
                     else:
                         rangePartyValues.append(tuple([party_id]+[0]*5))
-                # sort results by score descending
-                for rank,(party_id,party_votes,party_for_votes,party_against_votes,party_score,party_volume) in enumerate(sorted(rangePartyValues,key=itemgetter(4,0),reverse=True)):
+                # sort results by score (offset 4) and votes (offset 0) descending
+                sortedScores = sorted(rangePartyValues, key=itemgetter(4,0), reverse=True)
+                for rank, party_data in enumerate(sortedScores):
+                    party_id, party_votes, party_for_votes, party_against_votes, party_score, party_volume = party_data
                     party_range_data = dict(score=party_score,rank=rank,volume=party_volume,numvotes=party_votes,numforvotes=party_for_votes,numagainstvotes=party_against_votes)
                     if len(ranges)==1:
                         party_results[party_id]=party_range_data
                     else:
-                        party_results[party_id].append(party_range_data)
-            if fullRange:
+                        if party_id in party_seats:
+                            party_results[party_id].append(party_range_data)
+                        else:
+                            party_results[party_id].append(None)
+            if defaultRange:
                 cache.set('agenda_%d_parties_values' % self.id, parties_values, 1800)
         if len(ranges)==1:
             party_results = sorted(party_results.items(),key=lambda (k,v):v['rank'])
@@ -645,6 +658,10 @@ class Agenda(models.Model):
 
 
     def get_party_values(self):
+        party_grades = Agenda.objects.get_all_party_values_new()
+        return party_grades.get(self.id,[])
+
+    def get_party_values_old(self):
         party_grades = Agenda.objects.get_all_party_values()
         return party_grades.get(self.id,[])
 
